@@ -1,4 +1,4 @@
-from symbol import Symbol, EXTRACT
+from symbol import BitVec, EXTRACT, proved
 
 class MemoryException(Exception):
     '''
@@ -30,16 +30,16 @@ class DataMemory(object):
         addr.simplify()
         #data.simplify()
         for k in self.data.keys():
-            if addr == k:
+            if proved(addr == k):
                 self.data.pop(k)
         key = addr
         self.data[key] = EXTRACT(data, 0, 8)
     def getchar(self, addr):
         addr.simplify()
         for k in self.data.keys():
-            if addr == k:
+            if proved(addr == k):
                 return self.data[k]
-        retv = Symbol(str("[%s]" % addr), 8) # "[%s] % addr" may be a unicode, ...., cast it to str
+        retv = BitVec(str("[%s]" % addr), 8) # "[%s] % addr" may be a unicode, ...., cast it to str
         self.data[addr] = retv
         return retv
 

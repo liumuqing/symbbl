@@ -30,9 +30,12 @@ import types
 import weakref
 from functools import wraps, partial
 import collections
+#For the disassembler TODO: Use this http://ref.x86asm.net/x86reference.xml and pure python
 from distorm3 import Decompose, Decode16Bits, Decode32Bits, Decode64Bits, Mnemonics, Registers
-from symbol import Symbol, CONCAT, EXTRACT, ZEXTEND, SEXTEND, chr, ord
+from symbol import ITEBV as ITE, Bool, BitVec, issymbolic, ZEXTEND, SEXTEND, ord, chr, OR, AND, CONCAT, UDIV, UREM, ULT, UGT, ULE, EXTRACT, isconcrete
 
+import logging
+logger = logging.getLogger("CPU")
 
 
 #Exceptions..
@@ -115,16 +118,36 @@ def rep(old_method):
             old_method(cpu, *args,**kw_args)
     return new_method
 
+#register/flag descriptors
+class Flag(object):
+    value = False
+    def __get__(self, obj, type=None):
+        return self.value
+    def __set__(self, obj, value):
+        assert isinstance(val, (bool,Bool))
+        self.value = value
+
+class Register16(object):
+    '''
+    16 bit register.
+    '''
+    value = False
+    def __get__(self, obj, type=None):
+        return self.value
+    def __set__(self, obj, value):
+        assert isinstance(val, (int,long)) or (isinstance(val, BitVec) and val.size == 16)
+        self.value = value
+
 class Register256(object):
     ''' 
     256 bit register. 
     '''
     def __init__(self, name):
-        self._YMM = Symbol(name, 256)
+        self._YMM = BitVec(name, 256)
         self._cache = {} 
 
     def setYMM(self, val):
-        assert isinstance(val, (int,long)) or (isinstance(val, Symbol) and val.size == 256)
+        assert isinstance(val, (int,long)) or (isinstance(val, BitVec) and val.size == 256)
         self._YMM = val
         self._cache = {}
         return self._YMM
@@ -132,7 +155,7 @@ class Register256(object):
         return self._YMM
 
     def setXMM(self, val):
-        assert isinstance(val, (int,long)) or (isinstance(val, Symbol) and val.size == 128)
+        assert isinstance(val, (int,long)) or (isinstance(val, BitVec) and val.size == 128)
         self._YMM = ZEXTEND(val,256)  #TODO 
         self._cache = { 'XMM': val }
         return val
@@ -144,11 +167,11 @@ class Register64(object):
     64 bit register. 
     '''
     def __init__(self, name):
-        self._RX = Symbol(name, 64)
+        self._RX = BitVec(name, 64)
         self._cache = {} 
 
     def setRX(self, val):
-        assert isinstance(val, (int,long)) or (isinstance(val, Symbol) and val.size == 64)
+        assert isinstance(val, (int,long)) or (isinstance(val, BitVec) and val.size == 64)
         val = EXTRACT(val, 0, 64)
         self._RX = val
         self._cache = {}
@@ -157,7 +180,7 @@ class Register64(object):
         return self._RX
 
     def setEX(self,val):
-        assert isinstance(val, (int,long)) or (isinstance(val, Symbol) and val.size == 32)
+        assert isinstance(val, (int,long)) or (isinstance(val, BitVec) and val.size == 32)
         val = EXTRACT(val, 0, 32)
         self._RX = ZEXTEND(val,64)
         self._cache = { 'EX': EXTRACT(val, 0,32) }
@@ -166,7 +189,7 @@ class Register64(object):
         return self._cache.setdefault('EX', EXTRACT(self._RX, 0,32))
 
     def setX(self, val):
-        assert isinstance(val, (int,long)) or (isinstance(val, Symbol) and val.size == 16)
+        assert isinstance(val, (int,long)) or (isinstance(val, BitVec) and val.size == 16)
         val = EXTRACT(val, 0,16)
         self._RX = self._RX & 0xFFFFFFFFFFFF0000 | ZEXTEND(val,64)
         self._cache = { 'X': val}
@@ -175,7 +198,7 @@ class Register64(object):
         return self._cache.setdefault('X', EXTRACT(self._RX, 0,16))
 
     def setH(self, val):
-        assert isinstance(val, (int,long)) or (isinstance(val, Symbol) and val.size == 8)
+        assert isinstance(val, (int,long)) or (isinstance(val, BitVec) and val.size == 8)
         val = EXTRACT(val, 0,8)
         self._RX = self._RX & 0xFFFFFFFFFFFF00FF | ZEXTEND(val,64) << 8
         self._cache = {'H': val, 'L': self.getL()}
@@ -184,7 +207,7 @@ class Register64(object):
         return self._cache.setdefault('H', EXTRACT(self._RX, 8,8))
 
     def setL(self, val):
-        assert isinstance(val, (int,long)) or (isinstance(val, Symbol) and val.size == 8)
+        assert isinstance(val, (int,long)) or (isinstance(val, BitVec) and val.size == 8)
         val = EXTRACT(val, 0,8)
         self._RX = self._RX & 0xFFFFFFFFFFFFFF00 | ZEXTEND(val,64)
         self._cache = {'L': val, 'H': self.getH()}
@@ -199,6 +222,17 @@ def prop( attr, size):
 
 #Main CPU class
 class Cpu(object):
+    '''
+    A CPU model.
+    '''
+    def setOS(self,os):
+        '''
+        Sets the Operating System running on this CPU.
+        @param os: the operating system to set. 
+        '''
+        assert self.os is None
+        self.os=weakref.ref(os)
+
     def __init__(self, instmem, memory, machine='i386'):
         '''
         Builds a CPU model.
@@ -206,8 +240,11 @@ class Cpu(object):
         @param machine:  machine code name. Supported machines: C{'i386'} and C{'amd64'}.
         '''
         assert machine in ['i386','amd64']
+        #assert machine in ['i386'] , "Platform not supportes by translate"
+        self.os             = None
         self.mem            = memory #Shall have getchar and putchar methods.
         self.instmem        = instmem
+        self.icount         = 0
         self.machine        = machine
 
         self.AddressSize    = {'i386':32, 'amd64':64}[self.machine]
@@ -239,6 +276,7 @@ class Cpu(object):
         for reg in ['CF','PF','AF','ZF','SF','DF','OF','IF']:
             setattr(self, reg, False)
 
+        logger.info("Cpu Initialized.")
 
     RIP   = prop('_RIP', 'RX')
     EIP   = prop('_RIP', 'EX')
@@ -376,7 +414,7 @@ class Cpu(object):
                 'R10B', 'R11', 'R11D', 'R11W', 'R11B', 'R12', 'R12D', 'R12W',
                 'R12B', 'R13', 'R13D', 'R13W', 'R13B', 'R14', 'R14D', 'R14W',
                 'R14B', 'R15', 'R15D', 'R15W', 'R15B', 'ES', 'CS', 'SS', 'DS',
-                'FS', 'GS', 'RIP', 'EIP', 'IP',#'RFLAGS','EFLAGS','FLAGS', 
+                'FS', 'GS', 'RIP', 'EIP', 'IP','RFLAGS','EFLAGS','FLAGS', 
                 'XMM0', 'XMM1', 'XMM2', 'XMM3', 'XMM4', 'XMM5', 'XMM6', 'XMM7',
                 'XMM8', 'XMM9', 'XMM10', 'XMM11', 'XMM12', 'XMM13', 'XMM14', 
                 'XMM15', 'YMM0', 'YMM1', 'YMM2', 'YMM3', 'YMM4', 'YMM5', 'YMM6',
@@ -401,6 +439,106 @@ class Cpu(object):
         '''
         assert name in self.listRegisters()
         return getattr(self, name)
+
+    def __getstate__(self):
+        state = {}
+        #state['os'] = self.os
+        state['machine'] = self.machine
+        state['icount'] = self.icount
+        state['regs'] = {}
+        for name in ['_RAX', '_RCX', '_RDX', '_RBX', '_RSP', '_RBP', '_RSI', 
+                     '_RDI', '_R8', '_R9', '_R10', '_R11', '_R12', '_R13', 
+                     '_R14', '_R15',  '_RIP', 
+                     'ES', 'CS', 'SS', 'DS', 'FS', 'GS', 'CF',
+                     'PF','AF','ZF','SF','DF','OF','IF',
+                     '_YMM0', '_YMM1', '_YMM2', '_YMM3', '_YMM4', '_YMM5', 
+                     '_YMM6', '_YMM7', '_YMM8', '_YMM9', '_YMM10', '_YMM11', 
+                     '_YMM12', '_YMM13', '_YMM14', '_YMM15']:
+            state['regs'][name] = getattr(self,name)
+
+        state['mem'] = self.mem
+        state['segments'] = self.segments
+        state['mem_cache'] = self.mem_cache
+        state['mem_cache_used'] = self.mem_cache_used
+        return state
+
+    def __setstate__(self, state):
+        self.machine = state['machine']
+        self.icount = state['icount']
+
+        for name in ['_RAX', '_RCX', '_RDX', '_RBX', '_RSP', '_RBP', '_RSI', 
+                     '_RDI', '_R8', '_R9', '_R10', '_R11', '_R12', '_R13', 
+                     '_R14', '_R15',  '_RIP', 'ES', 'CS', 'SS', 'DS', 'FS', 
+                     'GS', 'CF', 'PF','AF','ZF','SF','DF','OF','IF', '_YMM0',
+                     '_YMM1', '_YMM2', '_YMM3', '_YMM4', '_YMM5', '_YMM6', 
+                     '_YMM7', '_YMM8', '_YMM9', '_YMM10', '_YMM11', '_YMM12', 
+                     '_YMM13', '_YMM14', '_YMM15']:
+            setattr(self, name, state['regs'][name])
+
+        self.AddressSize = {'i386':32, 'amd64':64}[self.machine]
+        self.dmode = {'i386':Decode32Bits, 'amd64':Decode64Bits}[self.machine]
+        self.PC_name = {'i386': 'EIP', 'amd64': 'RIP'}[self.machine]
+        self.STACK_name = {'i386': 'ESP', 'amd64': 'RSP'}[self.machine]
+        self.FRAME_name = {'i386': 'EBP', 'amd64': 'RBP'}[self.machine]
+
+        self.mem = state['mem']
+        self.os = None #state['os']
+        self.segments = state['segments']
+        self.mem_cache = state['mem_cache']
+        self.mem_cache_used = state['mem_cache_used']
+        self.instruction_cache = {}
+
+    _flags={
+        'CF': 0x00001,
+        'PF': 0x00004,
+        'AF': 0x00010,
+        'ZF': 0x00040,
+        'SF': 0x00080,
+        'DF': 0x00400,
+        'OF': 0x00800,
+        'IF': 0x10000,
+    }
+    base_flags = 0
+    def setRFLAGS(self, value):
+        '''
+        Setter for RFLAGS.
+        @param value: new value for RFLAGS. 
+        '''
+        for name, mask in self._flags.items():
+            setattr(self, name, value & mask !=0)
+        self.base_flags = value
+
+    def getRFLAGS(self):
+        '''
+        Getter for RFLAGS.
+        @rtype: int
+        @return: current RFLAGS value. 
+        '''
+        reg = 0
+        for name, mask in self._flags.items():
+            reg |= ITE(64, getattr(self, name), mask, 0)
+        return reg | (self.base_flags & ~ (0x00001|0x00004|0x00010|0x00040|0x00080|0x00400|0x00800|0x10000))
+
+    def getEFLAGS(self):
+        '''
+        Getter for EFLAGS.
+        @rtype: int
+        @return: current EFLAGS value. 
+        '''
+        return EXTRACT(self.getRFLAGS(),0,32)
+
+    def getFLAGS(self):
+        '''
+        Getter for FLAGS.
+        
+        @rtype: int
+        @return: current FLAGS value. 
+        '''
+        return EXTRACT(self.getRFLAGS(),0,16)
+    
+    RFLAGS = property(getRFLAGS,setRFLAGS)
+    EFLAGS = property(getEFLAGS,setRFLAGS)
+    FLAGS = property(getFLAGS,setRFLAGS)
 
     #Special Registers
     def getPC(self):
@@ -453,6 +591,53 @@ class Cpu(object):
         '''
         return self.setRegister(self.FRAME_name,value)
     FRAME = property(getFRAME,setFRAME)
+
+    def dumpregs(self):
+        '''
+        Returns the current registers values.
+        
+        @rtype: str
+        @return: a string containing the name and current value for all the registers. 
+        '''
+        CHEADER = '\033[95m'
+        CBLUE = '\033[94m'
+        CGREEN = '\033[92m'
+        CWARNING = '\033[93m'
+        CFAIL = '\033[91m'
+        CEND = '\033[0m'
+
+        result = ""
+        pos = 0
+        for reg_name in ['RAX', 'RCX', 'RDX', 'RBX', 'RSP', 'RBP', 'RSI', 'RDI', 'R8', 'R9', 'R10', 'R11', 'R12', 'R13', 'R14', 'R15',  'RIP',]:
+            value = getattr(self, reg_name)
+            if issymbolic(value):
+                result += "%s: "%reg_name + CFAIL+"%16s"%value+CEND+'\n'
+            else:
+                result += "%s: 0x%016x"%(reg_name, value)
+
+            if pos < 80-25:
+                pos += 25
+                result += '\t'
+            else:
+                pos =0
+                result += '\n'
+
+        pos = 0
+        for reg_name in ['CF','SF','ZF','OF','AF', 'PF', 'IF']:
+            value = getattr(self, reg_name)
+            if issymbolic(value):
+                result += "%s:"%reg_name + CFAIL+ "%16s\n"%value+CEND
+            else:
+                result += "%s: %1x"%(reg_name, value)
+
+            if pos < 80-25:
+                pos += 25
+                result += '\t'
+            else:
+                pos =0
+                result += '\n'
+
+        return result
 
     #Basic Memory Access
     def write(self, where, data):
@@ -535,6 +720,7 @@ class Cpu(object):
         return value
 
     #Execution
+    @memoized('instruction_cache') #No dinamic code!!! #TODO!
     def getInstruction(cpu,pc):
         '''
         Decode an Intel instruction from memory. This is a wrapper for the distorm3 DecomposeInterface.
@@ -653,9 +839,141 @@ class Cpu(object):
             raise NotImplemented()
         return value
 
-    def calculateFlags(*args):
-        #TODO
-        pass
+#TODO: erradicate stupid flag functions
+    def calculateFlags(self, op, size, res, arg0=0, arg1=0):
+        '''
+        Changes the value of the flags after an operation.
+        
+        @param op: the operation that was performed.
+        @param size: the size of the operands.
+        @param res: the result of the operation.
+        @param arg0: the first argument of the operation.
+        @param arg1: the second argument of the operation.
+        '''
+        MASK = (1<<size)-1
+        SIGN_MASK = 1<<(size-1)
+        res = res & MASK
+        arg0 = arg0 & MASK
+        arg1 = arg1 & MASK
+
+        #print "calculateFlags:",size, res, arg0, arg1
+        '''Carry Flag.
+            Set if an arithmetic operation generates a carry or a borrow out
+            of the most-significant bit of the result; cleared otherwise. This flag indi-
+            cates an overflow condition for unsigned-integer arithmetic. It is also used
+            in multiple-precision arithmetic.
+        '''
+        if op in ['ADC']:
+            self.CF = OR(ULT(res, arg0), AND(self.CF,  res == arg0))
+        elif op in ['ADD']:
+            self.CF = ULT(res, arg0)
+        elif op in ['CMP', 'SUB']:
+            self.CF = ULT(arg0, arg1)
+        elif op in ['SBB']:
+            self.CF = ULT(arg0, res) | (self.CF & (arg1==MASK))
+        elif op in ['LOGIC']: 
+            self.CF = False     #cleared
+        elif op in ['NEG']: 
+            self.CF = arg0 != 0
+        elif op in ['SHL']: 
+            #self.CF = ITE(1, UGT(arg1,size), False, 0 != (arg0 >> (size-arg1))&1)
+            self.CF = ( ULE(arg1,size)) | ( 0 != (arg0 >> (size-arg1))&1)
+        elif op in ['SHR']:
+            if isinstance(arg1, (long,int)) and arg1 > 0 :
+                self.CF = 0 != ((arg0 >> (arg1 - 1))&1) #Shift one less than normally and keep LSB
+            else:
+                #symbol friendly op
+                self.CF = ITE(1, arg1>0, 0 != ((arg0 >> (arg1 - 1))&1), self.CF) !=0 
+        elif op in ['SAR']: 
+            if arg1>0 :
+                self.CF = 0 != ((arg0 // ( 1 << (arg1 - 1) ))&1) #Shift(SIGNED) one less than normally and keep LSB
+        elif op in ['SHL']: 
+            self.CF = 0 != ((arg0 >> (size - arg1)) & 1) 
+        elif op in ['AAA', 'DEC', 'INC']:
+            pass            #undefined / Not Affected
+        else:
+            raise NotImplemented()
+
+        '''Adjust flag.
+            Set if an arithmetic operation generates a carry or a borrow
+            out of bit 3 of the result; cleared otherwise. This flag is used in binary-
+            coded decimal (BCD) arithmetic.
+        '''
+        if op in ['ADC', 'ADD', 'CMP', 'SBB', 'SUB' ]:
+            self.AF = ((arg0 ^ arg1) ^ res) & 0x10 != 0
+        elif op in ['DEC']:
+            self.AF= (res & 0x0f) == 0x0f
+        elif op in ['INC']:
+            self.AF= (res & 0x0f) == 0x00
+        elif op in ['NEG']:
+            #self.AF=((0 ^ (-res)) ^ res) & 0x10 != 0
+            self.AF= (res & 0x0f) == 0x00
+        elif op in ['AAA', 'SHL', 'SAR', 'SHR']:
+            self.AF = False 
+            pass #undefined
+        elif op in ['LOGIC']:
+            self.AF = False
+        else:
+            raise NotImplemented()
+
+        '''Zero flag.
+            Set if the result is zero; cleared otherwise.
+        '''
+        if op in ['ADC', 'ADD', 'CMP', 'LOGIC', 'NEG', 'DEC', 'INC', 'SBB', 'SUB', 'SHL', 'SHR', 'SAR']:
+            self.ZF = res == 0
+        else:
+            raise NotImplemented()
+
+        '''Sign flag.
+            Set equal to the most-significant bit of the result, which is the
+            sign bit of a signed integer. (0 indicates a positive value and 1 indicates a
+            negative value.)
+        '''
+        if op in ['ADC', 'ADD', 'LOGIC', 'NEG', 'DEC', 'INC', 'CMP', 'SBB', 'SUB', 'SHL', 'SHR', 'SAR']:
+            self.SF = (res & SIGN_MASK)!=0
+        else:
+            raise NotImplemented()
+
+        '''Overflow flag.
+            Set if the integer result is too large a positive number or
+            too small a negative number (excluding the sign-bit) to fit in the destina-
+            tion operand; cleared otherwise. This flag indicates an overflow condition
+            for signed-integer (two's complement) arithmetic.
+        '''
+        if op in ['ADC', 'ADD']:
+            self.OF = (((arg0 ^ arg1 ^ SIGN_MASK) & (res ^ arg1)) & SIGN_MASK) != 0
+        elif op in ['CMP', 'SBB', 'SUB']:
+            sign0 = (arg0 & SIGN_MASK) ==SIGN_MASK
+            sign1 = (arg1 & SIGN_MASK) ==SIGN_MASK
+            signr = (res & SIGN_MASK) ==SIGN_MASK
+            self.OF = AND(sign0 ^ sign1, sign0 ^ signr) #(((arg0 ^ arg1& SIGN_MASK ) & (arg0 ^ res& SIGN_MASK)& SIGN_MASK) & SIGN_MASK) != 0
+        elif op in ['LOGIC']: 
+            self.OF = False     #cleared
+        elif op in ['DEC']: 
+            self.OF = res == ~SIGN_MASK
+        elif op in ['INC', 'NEG']: 
+            self.OF = res == SIGN_MASK
+        elif op in ['SHL']: 
+            self.OF = 0 != ((res ^ arg0) & SIGN_MASK)
+        elif op in ['SHR']: 
+            self.OF = AND(arg1 == 1, arg0 & SIGN_MASK != 0)
+#            self.OF = ITE(1,arg1 == 1, 0 != (arg0>>(size-1))&1, False)
+        elif op in ['SAR']: 
+            self.OF = False
+        elif op in ['AAA']:
+            pass            #undefined
+        else:
+            raise NotImplemented()
+
+        '''Parity flag.
+            Set if the least-significant byte of the result contains an even
+            number of 1 bits; cleared otherwise.
+        '''
+        if op in ['ADC', 'ADD', 'CMP', 'SUB', 'SBB', 'LOGIC', 'NEG', 'DEC', 'INC', 'SHL', 'SHR', 'SAR']:
+            self.PF = (res ^ res>>1 ^ res>>2 ^ res>>3 ^ res>>4 ^ res>>5 ^ res>>6 ^ res>>7)&1 == 0
+        else:
+            raise NotImplemented()
+#End calculate flags
 
     def execute(cpu):
         ''' Decode, and execute one intruction pointed by register PC'''
@@ -668,9 +986,14 @@ class Cpu(object):
             raise InstructionNotImplemented( "Instruction %s at %x Not Implemented (text: %s)" % 
                     (instruction.mnemonic, cpu.PC, instruction.instructionBytes.encode('hex')) )
         #log
+        if logger.level == logging.DEBUG :
+            for l in cpu.dumpregs().split('\n'):
+                logger.debug(l)
+        logger.debug("INSTRUCTION: %016x %s",cpu.PC, instruction)
         implementation = getattr(cpu, instruction.mnemonic)
         implementation(*instruction.operands)
         #housekeeping
+        cpu.icount += 1
         cpu.instruction=None
 
     @instruction
@@ -2914,7 +3237,6 @@ class Cpu(object):
         cpu.PC = cpu.pop(cpu.AddressSize)
         cpu.STACK += N
 
-    """
     @instruction
     def JA(cpu, target):
         '''
@@ -3244,7 +3566,6 @@ class Cpu(object):
         @param target: destination operand.         
         '''
         cpu.PC = ITE(cpu.AddressSize, cpu.ZF, target.read(), cpu.PC)
-"""
 
     @instruction
     def JMP(cpu, target):

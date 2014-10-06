@@ -1,6 +1,6 @@
 from cpu import Cpu
 from memory import InstMemory, DataMemory
-from symbol import Symbol, CONCAT
+from symbol import BitVec, CONCAT
 
 instmem = InstMemory()
 datamem = DataMemory()
@@ -33,7 +33,7 @@ for addr in xrange(len(inst)):
     instmem.putchar(addr, inst[addr])
 
 def giveName(addr, name, lenOfBit):
-    s = Symbol(name, lenOfBit)
+    s = BitVec(name, lenOfBit)
     lenOfByte = lenOfBit / 8
     for i in range(lenOfByte):
         datamem.putchar(addr + i, s >> (8*i))
@@ -43,14 +43,14 @@ def printAddr(addr, lenOfBit):
     a = []
     for i in range(lenOfByte):
        a.append(datamem.getchar(addr+i))
-    print "%s@[%s] = %s" % (lenOfByte, p(addr),  CONCAT(8, a[::-1]).simplify())
+    print "%s@[%s] = %s" % (lenOfByte, p(addr),  p(CONCAT(8, a[::-1]).simplify()))
     
 RSP0 = cpu.RSP
 giveName(cpu.RSP-16, "B", 32)
 giveName(cpu.RSP-20, "A", 32)
 
 def p(s):
-    if isinstance(s, Symbol):
+    if isinstance(s, BitVec):
         s.simplify()
     s = str(s)
     retv = ""
@@ -88,4 +88,5 @@ printAddr(RSP0 -8, 32)
 printAddr(RSP0 -12, 32)
 printAddr(RSP0 -16, 32)
 printAddr(RSP0 -20, 32)
+printAddr(RSP0 -24, 32)
 
