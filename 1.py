@@ -35,15 +35,14 @@ for addr in xrange(len(inst)):
 def giveName(addr, name, lenOfBit):
     s = BitVec(name, lenOfBit)
     lenOfByte = lenOfBit / 8
+    datamem.store(addr, BitVec(name, lenOfBit), lenOfBit)
+    return 
     for i in range(lenOfByte):
         datamem.putchar(addr + i, s >> (8*i))
 
 def printAddr(addr, lenOfBit):
     lenOfByte = lenOfBit / 8
-    a = []
-    for i in range(lenOfByte):
-       a.append(datamem.getchar(addr+i))
-    print "%s@[%s] = %s" % (lenOfByte, p(addr),  p(CONCAT(8, a[::-1]).simplify()))
+    print "%s@[%s] = %s" % (lenOfByte, p(addr),  p(datamem.load(addr, lenOfBit)))
     
 RSP0 = cpu.RSP
 giveName(cpu.RSP-16, "B", 32)
@@ -86,7 +85,7 @@ while cpu.PC < len(inst):
 for reg in cpu.listRegisters():
     print eval("p('%s') + '\t\t' + p(cpu.%s)" % (reg, reg))
 for k in sorted(cpu.mem.data.keys(), key=lambda s: str(s)):
-    print p(k), "-----",p(cpu.mem.data[k])
+    print p(k[0]), "-----",p(cpu.mem.data[k])
 print 
 print 
 printAddr(RSP0 -4, 32)

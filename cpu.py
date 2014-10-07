@@ -673,11 +673,14 @@ class Cpu(object):
         @param size: the amount of bytes to write. 
         '''
         assert size in [8, 16, 32, 64, 128, 256] 
+        self.mem.store(where, expr, size)
+        """
         for i in xrange(0,size,8):
             if i == 0:
                 self.mem.putchar(where, chr(expr))
             else:
                 self.mem.putchar(where+i/8, chr(expr>>i))
+        """
 
     #@getcache("mem_cache")
     def load(self, where, size):
@@ -689,7 +692,8 @@ class Cpu(object):
         @param size: the number of bits to read.
         @return: the value read.
         '''
-        return CONCAT(8, *[ord(self.mem.getchar(where+i/8)) for i in reversed(xrange(0,size,8))])
+        #return CONCAT(8, *[ord(self.mem.getchar(where+i/8)) for i in reversed(xrange(0,size,8))])
+        return self.mem.load(where, size)
         #expr = 0
         #for i in xrange(0,size,8):
         #    expr = expr | (ZEXTEND(ord(self.mem.getchar(where+i/8)),size) << i)

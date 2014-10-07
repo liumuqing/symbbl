@@ -1,4 +1,4 @@
-from symbol import BitVec, EXTRACT, proved
+from symbol import BitVec, EXTRACT, proved, CONCAT
 
 class MemoryException(Exception):
     '''
@@ -30,17 +30,48 @@ class DataMemory(object):
         addr.simplify()
         #data.simplify()
         for k in self.data.keys():
-            if proved(addr == k):
+            if proved(addr == k[0]):
                 self.data.pop(k)
-        key = addr
+        key = (addr, 1)
         self.data[key] = EXTRACT(data, 0, 8)
     def getchar(self, addr):
         addr.simplify()
         for k in self.data.keys():
-            if proved(addr == k):
+            if proved(addr == k[0]) and k[1] == 1:
                 return self.data[k]
-        retv = BitVec(str("[%s]" % addr), 8) # "[%s] % addr" may be a unicode, ...., cast it to str
-        self.data[addr] = retv
+        retv = BitVec(str("1@[%s]" % addr), 8) # "[%s] % addr" may be a unicode, ...., cast it to str
+        self.data[(addr, 1)] = retv
         return retv
+    def load(self, addr, sizeOfBit):
+        sizeOfByte = sizeOfBit / 8
+        for k in self.data.keys():
+            if proved(addr == k[0]) and proved(sizeOfByte == k[1]):
+                return self.data[k]
+            if proved(addr  >= k[0]) and proved(addr < k[0] + k[1]) or proved(k[0] >= addr) and proved(k[0] < addr + sizeOfByte):
+                retv = CONCAT(8, *[self.getchar(addr+i) for i in reversed(range(0, sizeOfByte))])
+                assert retv.size == sizeOfBit
+                return retv
+        retv = BitVec((str("%d@[%s]" % (sizeOfByte, addr))), sizeOfBit)
+        self.data[(addr, sizeOfByte)] = retv
+        return retv
+    @staticmethod
+    def _addrInRange(addr, start, length):
+        if proved(addr < start):
+            return -1
+        if proved(addr >= start) and proved(addr < start + length):
+            return 0
+        if proved(addr >= start + length):
+            return 1
+        assert False
+    def store(self, addr, data, sizeOfBit):
+        sizeOfByte = sizeOfBit / 8
+        for k in self.data.keys():
+            if proved(addr  >= k[0]) and proved(addr < k[0] + k[1]) or proved(k[0] >= addr) and proved(k[0] < addr + sizeOfByte):
+                self.data.pop(k)
+        self.data[(addr, sizeOfByte)] = EXTRACT(data, 0, sizeOfBit)
+
+
+
+
 
 
