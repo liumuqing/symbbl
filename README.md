@@ -1,9 +1,7 @@
 PySymEmu
 ========
-
-An intel 64 symbolic basic block analysis model. 
-``cpu.py`` is from https://github.com/feliam/pysymemu
-
+* An intel 64 symbolic basic block analysis model. 
+* ``cpu.py`` is from https://github.com/feliam/pysymemu
 
 Dependencies:
 -------------
@@ -12,5 +10,4 @@ Dependencies:
 
 How to Use:
 ------------
-* Install z3(copy ./bin/z3 to /usr/bin)
 * modify 1.py and run

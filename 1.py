@@ -83,6 +83,12 @@ while cpu.PC < len(inst):
     for k in sorted(cpu.mem.data.keys(), key=lambda s: str(s)):
         print p(k), "-----",p(cpu.mem.data[k])
     """
+for reg in cpu.listRegisters():
+    print eval("p('%s') + '\t\t' + p(cpu.%s)" % (reg, reg))
+for k in sorted(cpu.mem.data.keys(), key=lambda s: str(s)):
+    print p(k), "-----",p(cpu.mem.data[k])
+print 
+print 
 printAddr(RSP0 -4, 32)
 printAddr(RSP0 -8, 32)
 printAddr(RSP0 -12, 32)
