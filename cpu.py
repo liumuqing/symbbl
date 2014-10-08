@@ -1838,10 +1838,10 @@ class Cpu(object):
         @param cpu: current CPU.
         @param src: source operand.        
         '''
-        reg_name_h = { 16: 'AH', 32: 'DX', 64:'EDX', 128:'RDX'}[src.size]
-        reg_name_l = { 16: 'AL', 32: 'AX', 64:'EAX', 128:'RAX'}[src.size]
+        reg_name_h = { 8: 'AH', 16: 'DX', 32:'EDX', 64:'RDX'}[src.size]
+        reg_name_l = { 8: 'AL', 16: 'AX', 32:'EAX', 64:'RAX'}[src.size]
         dividend = CONCAT(src.size, cpu.getRegister(reg_name_h), cpu.getRegister(reg_name_l))
-        divisor = src.read()
+        divisor = ZEXTEND(src.read(), src.size * 2)
 
         if isinstance(divisor, (int,long)) and divisor == 0:
             raise DivideError()
@@ -1851,8 +1851,8 @@ class Cpu(object):
             raise DivideError()
         reminder = dividend % divisor
 
-        cpu.setRegister(reg_name_l, EXTRACT(quotient, 0, src.size/2))
-        cpu.setRegister(reg_name_h, EXTRACT(reminder, 0, src.size/2))
+        cpu.setRegister(reg_name_l, EXTRACT(quotient, 0, src.size))
+        cpu.setRegister(reg_name_h, EXTRACT(reminder, 0, src.size))
         #Flags Affected
         #The CF, OF, SF, ZF, AF, and PF flags are undefined.
 
