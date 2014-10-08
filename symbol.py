@@ -1,4 +1,9 @@
-import z3
+from z3 import z3
+import os
+
+my_path = os.path.split(os.path.realpath(__file__))[0]
+z3.init(os.path.join(my_path, "z3", "libz3.so"))
+
 class Symbol(object):
     def __init__(self, name, size = 0):
         raise Exception("Symbol is a virtual class")
