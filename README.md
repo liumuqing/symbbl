@@ -25,7 +25,7 @@ inst = ""
 for line in plaininst.split("\n"):
     if len(line) < 10:
         continue
-    inst += line.strip("\n")[9:32].replace("\t", "").replace(" ", "").decode("hex")
+    inst += line.strip("\n")[7:30].replace("\t", "").replace(" ", "").decode("hex")
 
 predefine = {("RBP-8", 4): "C", ("RBP-12", 4):"B", ("RBP-16", 4):"A"}
 
