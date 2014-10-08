@@ -1,6 +1,6 @@
 from cpu import Cpu
 from memory import InstMemory, DataMemory
-from symbol import BitVec, CONCAT, issymbolic
+from symbol import BitVec, CONCAT, issymbolic, isconcrete
 import copy
 def _doPreDefineMem(addr, lenOfByte, symbolName, datamem, cpu):
     assert lenOfByte in [1, 2, 4, 8]
@@ -17,7 +17,7 @@ def _doPreDefineMem(addr, lenOfByte, symbolName, datamem, cpu):
     datamem.store(_addr, BitVec(symbolName, lenOfBit), lenOfBit)
 
 def symbbl(inst, arch="i386", preDefineMem={}, startPC=0):
-
+    assert arch in ["i386", "amd64"]
 
     instmem = InstMemory()
     for addr in xrange(len(inst)):
@@ -33,7 +33,7 @@ def symbbl(inst, arch="i386", preDefineMem={}, startPC=0):
         _doPreDefineMem(k[0], k[1], preDefineMem[k], datamem, cpu)
 
     #RUN
-    while PC0 <=cpu.PC < len(inst)+PC0:
+    while PC0 <=cpu.PC < len(inst)+PC0 and isconcrete(cpu.PC):
         print cpu.getInstruction(cpu.PC)
         cpu.execute()
 
