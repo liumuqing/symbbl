@@ -4,18 +4,19 @@ class Symbol(object):
         raise Exception("Symbol is a virtual class")
 
     def __str__(self):
-        self.simplify()
+        self#.simplify()
         return str(self.symbol)
 
     size = property(lambda x : x.symbol.size())
 
     def simplify(self):
-        self.symbol = z3.simplify(self.symbol)
+        self.symbol = z3.simplify(self.symbol, elim_sign_ext=False)
         self._simplified = True
         return self
 
 class Bool(Symbol):
     def __init__(self, name):
+        self._simplified = False
         if isinstance(name, Bool):
             self.symbol = name.symbol
         elif isinstance(name, bool):
@@ -26,6 +27,16 @@ class Bool(Symbol):
             self.symbol = name
         else:
             raise Exception("Error")
+    def simplify(self):
+        super(Bool, self).simplify()
+        if proved(Bool(self)):
+            self.symbol = z3.BoolVal(True)
+        elif proved(Bool(self.symbol == False)):
+            self.symbol = z3.BoolVal(False)
+        self._simplified = True
+        return self
+
+
 def binaryBitVecOperatorWithIMM(method):
     def new_method(self, other):
         if isInt(self) and isInt(other):
@@ -35,7 +46,6 @@ def binaryBitVecOperatorWithIMM(method):
         elif isInt(other) and not isInt(self):
             other = BitVec(other, self.size)
         retv = method(self, other)
-        retv.simplify()
         return retv
     return new_method
 class BitVec(Symbol):
@@ -45,10 +55,10 @@ class BitVec(Symbol):
             self.symbol = z3.BitVecVal(name, size)
         elif isBitVec(name) and size == 0:
             self.symbol = name
-            self.simplify()
+            self#.simplify()
         elif isBitVec(name) and size != 0:
             self.symbol = z3.Extract(size-1, 0, name)
-            self.simplify()
+            self#.simplify()
         elif isinstance(name, str) and size != 0:
             self.symbol = z3.BitVec(name, size)
         else:
@@ -225,7 +235,8 @@ def _CONCAT(size, args):
     a = map(lambda x: x.symbol & ((1<<size)-1) if not isInt(x) else z3.BitVecVal(x, size), args)
     symbol = reduce(z3.Concat, a)
     retv = BitVec(symbol)
-    return retv
+    return retv#.simplify()
+
 def CONCAT(size, *args):
     assert len(args) > 0
     if isinstance(args[0], list) and len(args) == 1:
@@ -237,7 +248,7 @@ def CONCAT(size, *args):
 def EXTRACT(s, offset, size):
     if isinstance(s, Symbol):
         retv = BitVec(z3.Extract(offset + size - 1, offset, s.symbol) )
-        return retv
+        return retv#.simplify()
     if isInt(s):
         return (s>>offset)&((1<<size)-1)
     raise Exception("!@#$")
@@ -247,7 +258,7 @@ def ZEXTEND(s, size):
         assert s.size <= size
         if s.size != size:
             return BitVec(z3.Concat(z3.BitVecVal(0, size - s.size), s.symbol))
-        return s
+        return s#.simplify()
     if isInt(s):
         return s
     assert False
@@ -257,12 +268,10 @@ def SEXTEND(s, old_size, size):
     assert old_size <= size
     if isinstance(s, Symbol):
         assert s.size == old_size
-        if old_size == size:
-            return s
         if old_size != size:
-            return BitVec(z3.SignExt(size - old_size, s.symbol))
-        else:
-            return s
+            retv =  BitVec(z3.SignExt(size - old_size, s.symbol))
+            assert retv.size == size
+            return retv#.simplify()
         return s
     if isInt(s):
         if s < 0:
@@ -277,7 +286,7 @@ def SEXTEND(s, old_size, size):
 @binaryBitVecOperatorWithIMM
 def _UDIV(a, b):
     retv = BitVec(UDiv(a, b))
-    return retv
+    return retv#.simplify()
 def UDIV(a, b):
     if isInt(a) and isInt(b):
         return a / b
@@ -287,12 +296,13 @@ def UDIV(a, b):
 @binaryBitVecOperatorWithIMM
 def _UREM(a, b):
     retv = BitVec(URem(a, b))
-    return retv
+    return retv#.simplify()
 def UREM(a, b):
     if isInt(a) and isInt(b):
         return a % b
     else:
         return _UREM(a, b)
+
 def OR(a, b):
     return a | b
 def AND(a, b):

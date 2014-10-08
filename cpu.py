@@ -804,7 +804,6 @@ class Cpu(object):
         elif o.type == 'AbsoluteMemoryAddress':
             address += o.disp
         else:
-            print o.type
             raise NotImplemented()
         #TODO get a better way to manage selectors
         try:
@@ -1016,14 +1015,12 @@ class Cpu(object):
         '''
         arg0 = cpu.EAX
         if arg0 == 0:
-            print "CPUID 0"
             cpu.EAX=0x00000001
             #cpu.EAX=0x0000000d
             cpu.EBX=0x756e6547
             cpu.ECX=0x6c65746e
             cpu.EDX=0x49656e69
         elif arg0 == 1:
-            print "CPUID 1"
             #cpu.EAX = 0x206a7
             #cpu.EBX = 0x2100800
             #cpu.ECX = 0x1fbae3ff
@@ -1033,13 +1030,11 @@ class Cpu(object):
             cpu.ECX = 0x0
             cpu.EDX = 0xbfebfbff & 0x7ff
         elif arg0 == 2:
-            print "CPUID 2"
             cpu.EAX = 0x76035a01
             cpu.EBX = 0xf0b2ff
             cpu.ECX = 0
             cpu.EDX = 0xca0000
         elif arg0 == 4:
-            print "CPUID 4"
             if cpu. ECX == 0:
                 cpu.EAX = 0x1c004121
                 cpu.EBX = 0x1c0003f
@@ -1067,10 +1062,8 @@ class Cpu(object):
                 cpu.EDX = 0
         #FIXME:incomplete support for CPUID when EAX == 7
         elif arg0 == 7:
-            print "CPUID 7"
             cpu.EBX = 0x0
         elif arg0 == 0xb:
-            print "CPUID b"
             if cpu. ECX == 0:
                 cpu.EAX = 0x1
                 cpu.EBX = 0x2
@@ -1858,8 +1851,8 @@ class Cpu(object):
             raise DivideError()
         reminder = dividend % divisor
 
-        cpu.setRegister(reg_name_l, quotient)
-        cpu.setRegister(reg_name_h, reminder)
+        cpu.setRegister(reg_name_l, EXTRACT(quotient, 0, src.size/2))
+        cpu.setRegister(reg_name_h, EXTRACT(reminder, 0, src.size/2))
         #Flags Affected
         #The CF, OF, SF, ZF, AF, and PF flags are undefined.
 
@@ -1977,7 +1970,10 @@ class Cpu(object):
         elif len(operands) == 2:
             arg1 = operands[1].read()
             temp = SEXTEND(arg0,OperandSize,OperandSize*2) * SEXTEND(arg1,OperandSize,OperandSize*2)
+            #TODO:following two lines should be checked again
+            cpu.setRegister(reg_name_h, EXTRACT(temp,OperandSize,OperandSize))
             res = dest.write(EXTRACT(temp,0,OperandSize))
+            #res = temp&((1<<OperandSize)-1)
         else:
             arg1 = operands[1].read()
             arg2 = operands[2].read()
@@ -4715,7 +4711,7 @@ class Cpu(object):
         '''
         EDX:EAX = sign-extend of EAX
         '''
-        cpu.EDX = (SEXTEND(cpu.EAX, 32, 64) >> 32) & 0xffffffff
+        return EXTRACT(SEXTEND(cpu.EAX, 32, 64), 32, 32)
 
     @instruction
     def CWDE(cpu):
@@ -4727,14 +4723,14 @@ class Cpu(object):
             
         @param cpu: current CPU. 
         '''
-        cpu.EAX = SEXTEND(cpu.EAX,16,32)
+        cpu.EAX = SEXTEND(cpu.AX,16,32)
 
     @instruction
     def CWD(cpu):
         '''
         DX:AX = sign-extend of AX 
         '''
-        cpu.DX = (SEXTEND(cpu.AX, 16, 32) >> 16) & 0xffff
+        cpu.DX = EXTRACT(SEXTEND(cpu.AX, 16, 32), 16, 16)
 
     @instruction
     def CBW(cpu):

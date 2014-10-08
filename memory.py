@@ -28,7 +28,6 @@ class DataMemory(object):
         self.data = {}
     def putchar(self, addr, data):
         addr.simplify()
-        #data.simplify()
         for k in self.data.keys():
             if proved(addr == k[0]):
                 self.data.pop(k)
@@ -37,8 +36,8 @@ class DataMemory(object):
     def getchar(self, addr):
         addr.simplify()
         for k in self.data.keys():
-            if proved(addr == k[0]) and k[1] == 1:
-                return self.data[k]
+            if proved(addr >= k[0]) and proved(data < k[0] + k[1]):
+                return EXTRACT((addr - k[0]) * 8, 8, self.data[k])
         retv = BitVec(str("1@[%s]" % addr), 8) # "[%s] % addr" may be a unicode, ...., cast it to str
         self.data[(addr, 1)] = retv
         return retv
@@ -49,7 +48,6 @@ class DataMemory(object):
                 return self.data[k]
             if proved(addr  >= k[0]) and proved(addr < k[0] + k[1]) or proved(k[0] >= addr) and proved(k[0] < addr + sizeOfByte):
                 retv = CONCAT(8, *[self.getchar(addr+i) for i in reversed(range(0, sizeOfByte))])
-                assert retv.size == sizeOfBit
                 return retv
         retv = BitVec((str("%d@[%s]" % (sizeOfByte, addr))), sizeOfBit)
         self.data[(addr, sizeOfByte)] = retv
@@ -66,8 +64,15 @@ class DataMemory(object):
     def store(self, addr, data, sizeOfBit):
         sizeOfByte = sizeOfBit / 8
         for k in self.data.keys():
-            if proved(addr  >= k[0]) and proved(addr < k[0] + k[1]) or proved(k[0] >= addr) and proved(k[0] < addr + sizeOfByte):
+            if proved(addr == k[0]) and proved(sizeOfByte == k[1]):
                 self.data.pop(k)
+            if (proved(addr  >= k[0]) and proved(addr < k[0] + k[1])) or (proved(k[0] >= addr) and proved(k[0] < addr + sizeOfByte)):
+                old_data = self.data[k]
+                self.data.pop(k)
+            if proved(addr > k[0]) and proved(addr < k[0] + k[1]):
+                self.store(k[0], EXTRACT(0, (addr-k[0])*8, old_data), (addr-k[0])*8)
+            if proved(addr+sizeOfByte <= k[0]+k[1]) and proved(addr+sizeOfByte > k[0]):
+                self.store(addr+sizeOfByte, EXTRACT((k[1]-addr-sizeOfByter-k[0])*8 , (addr+sizeOfByte-k[0])*8, old_data), (addr+sizeOfByte-k[0]))
         self.data[(addr, sizeOfByte)] = EXTRACT(data, 0, sizeOfBit)
 
 
