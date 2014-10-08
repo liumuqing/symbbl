@@ -35,48 +35,15 @@ print prettyPrint(res)
 
 part of what you will get:
 ```
-RAX:
-Concat(0x0,
-       Extract(0x3f, 0x30, SignExt(0x20, A)*SignExt(0x20, B)),
-       Extract(0xf,
-               0x0,
-               bvsmod_i(Concat(Extract(0x2f,
-                                       0x20,
-                                       SignExt(0x20, A)*
-                                       SignExt(0x20, B)),
-                               Extract(0xf,
-                                       0x0,
-                                       SignExt(0x20, A))*
-                               Extract(0xf,
-                                       0x0,
-                                       SignExt(0x20, B))),
-                        C)))
-
-RCX:
-RCX
-
-0x4@[0xfffffffffffffffcL + RBP]:			Concat(Extract(0x3f, 0x30, SignExt(0x20, A)*SignExt(0x20, B)),
-       Extract(0xf,
-               0x0,
-               bvsmod_i(Concat(Extract(0x2f,
-                                       0x20,
-                                       SignExt(0x20, A)*
-                                       SignExt(0x20, B)),
-                               Extract(0xf,
-                                       0x0,
-                                       SignExt(0x20, A))*
-                               Extract(0xf,
-                                       0x0,
-                                       SignExt(0x20, B))),
-                        C)))
-
-0x4@[0xfffffffffffffff8L + RBP]:			C
-
-0x8@[RSP]:			0x8@[RSP]
-
-0x4@[0xfffffffffffffff0L + RBP]:			A
-
-0x4@[0xfffffffffffffff4L + RBP]:			B
+0x4@[0xfffffffc + Extract(0x1f, 0x0, RBP)]:			Extract(0x1f,
+        0x0,
+        bvsmod_i(Concat(Extract(0x3f,
+                                0x20,
+                                SignExt(0x20, A)*
+                                SignExt(0x20, B)),
+                        Extract(0x1f, 0x0, SignExt(0x20, A))*
+                        Extract(0x1f, 0x0, SignExt(0x20, B))),
+                 Concat(0x0, C)))
 ```
 	
 
