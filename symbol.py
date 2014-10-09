@@ -19,6 +19,16 @@ class Symbol(object):
         self._simplified = True
         return self
 
+def binaryBoolOperatorWithIMM(method):
+    def new_method(self, other):
+        if isinstance(self, bool):
+            self = Bool(self)
+        if isinstance(other, bool):
+            other = Bool(other)
+        retv = method(self, other)
+        return retv
+    return new_method
+
 class Bool(Symbol):
     def __init__(self, name):
         self._simplified = False
@@ -32,6 +42,14 @@ class Bool(Symbol):
             self.symbol = name
         else:
             raise Exception("Error")
+    @binaryBoolOperatorWithIMM
+    def __and__(self, other):
+        return Bool(self.symbol & other.symbol)
+
+    @binaryBoolOperatorWithIMM
+    def __or__(self.other):
+        return Bool(self.symbol & other.symbol)
+
     def simplify(self):
         super(Bool, self).simplify()
         if proved(Bool(self)):

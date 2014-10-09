@@ -46,4 +46,7 @@ part of what you will get:
                  Concat(0x0, C)))
 ```
 	
+TODO
+------------------------
+*	object of BitVec or Bool should be concreate if it can be simplified to a concreate value
 
