@@ -1,8 +1,5 @@
-from z3 import z3
+import z3
 import os
-
-my_path = os.path.split(os.path.realpath(__file__))[0]
-z3.init(os.path.join(my_path, "z3", "libz3.so"))
 
 class Symbol(object):
     def __init__(self, name, size = 0):
@@ -15,19 +12,9 @@ class Symbol(object):
     size = property(lambda x : x.symbol.size())
 
     def simplify(self):
-        self.symbol = z3.simplify(self.symbol, elim_sign_ext=False)
+        self.symbol = z3.simplify(self.symbol, elim_sign_ext = False)
         self._simplified = True
         return self
-
-def binaryBoolOperatorWithIMM(method):
-    def new_method(self, other):
-        if isinstance(self, bool):
-            self = Bool(self)
-        if isinstance(other, bool):
-            other = Bool(other)
-        retv = method(self, other)
-        return retv
-    return new_method
 
 class Bool(Symbol):
     def __init__(self, name):
@@ -42,14 +29,6 @@ class Bool(Symbol):
             self.symbol = name
         else:
             raise Exception("Error")
-    @binaryBoolOperatorWithIMM
-    def __and__(self, other):
-        return Bool(self.symbol & other.symbol)
-
-    @binaryBoolOperatorWithIMM
-    def __or__(self.other):
-        return Bool(self.symbol & other.symbol)
-
     def simplify(self):
         super(Bool, self).simplify()
         if proved(Bool(self)):
@@ -417,6 +396,9 @@ def issymbolic(s):
     return isinstance(s, Symbol)
 def isconcrete(s):
     return not issymbolic(s)
+
+class Array(object):
+    pass
 if __name__ == "__main__":
     a = z3.BitVec("a", 32)
     print type(z3.BitVec)

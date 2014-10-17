@@ -1,4 +1,4 @@
-from symbol import BitVec, EXTRACT, proved, CONCAT
+from pysymemu.smtlibv2 import BitVec, EXTRACT, proved, CONCAT
 
 class MemoryException(Exception):
     '''

@@ -1,6 +1,6 @@
 from cpu import Cpu
 from memory import InstMemory, DataMemory
-from symbol import BitVec, CONCAT, issymbolic, isconcrete
+from pysymemu.smtlibv2 import BitVec, CONCAT, issymbolic, isconcrete
 import copy
 def _doPreDefineMem(addr, lenOfByte, symbolName, datamem, cpu):
     assert lenOfByte in [1, 2, 4, 8]
