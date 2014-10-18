@@ -16,6 +16,18 @@ class Symbol(object):
         self._simplified = True
         return self
 
+def binaryBoolOperatorWithIMM(method):
+    def new_method(self, other):
+        if isinstance(self, bool) and isinstance(other, bool):
+            raise Exception("Error!")
+        elif isinstance(self, bool) and isinstance(other, Bool):
+            self = Bool(self)
+        elif isinstance(self, Bool) and isinstance(other, bool):
+            other = Bool(other)
+        retv = method(self, other)
+        return retv
+    return new_method
+
 class Bool(Symbol):
     def __init__(self, name):
         self._simplified = False
@@ -37,7 +49,28 @@ class Bool(Symbol):
             self.symbol = z3.BoolVal(False)
         self._simplified = True
         return self
+    
+    @binaryBoolOperatorWithIMM
+    def __and__(self, other):
+        return Bool(z3.And(self.symbol, other.symbol))
+    @binaryBoolOperatorWithIMM
+    def __rand__(self, other):
+        return Bool(z3.And(other.symbol, self.symbol))
 
+    @binaryBoolOperatorWithIMM
+    def __or__(self, other):
+        return Bool(z3.Or(self.symbol, other.symbol))
+    @binaryBoolOperatorWithIMM
+    def __ror__(self, other):
+        return Bool(z3.Or(other.symbol, self.symbol))
+
+
+    @binaryBoolOperatorWithIMM
+    def __xor__(self, other):
+        return Bool(z3.Xor(self.symbol, other.symbol))
+    @binaryBoolOperatorWithIMM
+    def __rxor__(self, other):
+        return Bool(z3.Xor(self.symbol, other.symbol))
 
 def binaryBitVecOperatorWithIMM(method):
     def new_method(self, other):
@@ -399,6 +432,20 @@ def isconcrete(s):
 
 class Array(object):
     pass
+
+def getallvalues(x):
+    retv = []
+    #TODO: use a different name
+    s = z3.BitVec("PC", x.size)
+    solver = z3.Solver()
+    solver.add(s == x.symbol)
+    while solver.check() == z3.sat:
+        m = solver.model()
+        v = m[s]
+        retv.append(v)
+        solver.add(s != v)
+    return retv
+
 if __name__ == "__main__":
     a = z3.BitVec("a", 32)
     print type(z3.BitVec)

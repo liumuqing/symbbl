@@ -26,9 +26,38 @@ class InstMemory(object):
 class DataMemory(object):
     def __init__(self):
         self.data = {}
+    @staticmethod
+    def provedAddrSizeInList(addr, size, l):
+        if len(l) == 0:
+            return []
+        if len(l) == 1:
+            k = l[0]
+            if size != 0 and proved((addr==k[0]) & (size == k[1])):
+                return l
+            elif size == 0 and proved(addr==k[0]):
+                return l
+            else:
+                return []
+        retv = []
+
+        left = l[:len(l)/2]
+        right = l[len(l)/2:]
+        for ll in [left, right]:
+            exp = False
+            for k in ll:
+                if size == 0:
+                    exp = exp | (addr == k[0])
+                else:
+                    exp = exp | ((addr == k[0]) & (size == k[1]))
+            if proved(exp):
+                a = DataMemory.provedAddrSizeInList(addr, size, ll)
+                retv.extend(a)
+        return retv
+
     def putchar(self, addr, data):
         addr.simplify()
-        data.simplify()
+        if isinstance(data, BitVec):
+            data.simplify()
         for k in self.data.keys():
             if proved(addr == k[0]):
                 self.data.pop(k)
@@ -45,33 +74,29 @@ class DataMemory(object):
     def load(self, addr, sizeOfBit):
         sizeOfByte = sizeOfBit / 8
         #assert proved(addr%sizeOfByte == 0) #This line is Wrong, e.g RBP-8 will not be proved
+        for k in self.provedAddrSizeInList(addr, sizeOfByte, self.data.keys()):
+            return self.data[k]
+        """
         for k in self.data.keys():
-            if proved(addr == k[0]) and proved(sizeOfByte == k[1]):
-                return self.data[k]
             if proved(addr/k[1]*k[1]  == k[0]) or proved(k[0]/sizeOfByte*sizeOfByte == addr):
                 retv = CONCAT(8, *[self.getchar(addr+i) for i in reversed(range(0, sizeOfByte))])
                 return retv
+        """
         retv = BitVec((str("%d@[%s]" % (sizeOfByte, addr))), sizeOfBit)
         self.data[(addr, sizeOfByte)] = retv
         return retv
-    @staticmethod
-    def _addrInRange(addr, start, length):
-        if proved(addr < start):
-            return -1
-        if proved(addr >= start) and proved(addr < start + length):
-            return 0
-        if proved(addr >= start + length):
-            return 1
-        assert False
     def store(self, addr, data, sizeOfBit):
         addr.simplify()
-        data.simplify()
+        print addr, "-------", data
+        if isinstance(data, BitVec):
+            data.simplify()
         sizeOfByte = sizeOfBit / 8
+        for k in self.provedAddrSizeInList(addr, sizeOfByte, self.data.keys()):
+            self.data.pop(k)
+            self.data[(addr, sizeOfByte)] = EXTRACT(data, 0, sizeOfBit)
+            return 
+        """
         for k in self.data.keys():
-            if proved(addr == k[0]) and proved(sizeOfByte == k[1]):
-                self.data.pop(k)
-                self.data[(addr, sizeOfByte)] = EXTRACT(data, 0, sizeOfBit)
-                return 
             if proved(addr/k[1]*k[1]  == k[0]) and proved(k[0] == k[0] % sizeOfByte):
                 old_data = self.data[k]
                 self.data.pop(k)
@@ -80,6 +105,7 @@ class DataMemory(object):
             elif proved(k[0] == addr / k[1] * k[1]):
                 #FIXME: this line is wrong
                 pass
+        """
         self.data[(addr, sizeOfByte)] = EXTRACT(data, 0, sizeOfBit)
 
 
