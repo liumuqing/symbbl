@@ -3,7 +3,7 @@ from distorm3 import Decompose, Decode16Bits, Decode32Bits, Decode64Bits, Mnemon
 
 import pysymemu
 from pysymemu import cpu
-from pysymemu.smtlibv2 import BitVec
+from pysymemu.smtlibv2 import BitVec, proved, EXTRACT, CONCAT, SEXTEND, UDIV, UREM
 
 
 class Register256(cpu.Register256):
@@ -107,58 +107,17 @@ class Cpu(cpu.Cpu):
 
     @cpu.instruction
     def IDIV(cpu, src):
-        ''' 
-        Signed divide.
-        
-        Divides (signed) the value in the AL, AX, or EAX register by the source operand and stores the result 
-        in the AX, DX:AX, or EDX:EAX registers. The source operand can be a general-purpose register or a memory 
-        location. The action of this instruction depends on the operand size.::
-
-                IF SRC  =  0
-                THEN #DE; (* divide error *) 
-                FI;
-                IF OpernadSize  =  8 (* word/byte operation *)
-                THEN
-                    temp  =  AX / SRC; (* signed division *)
-                    IF (temp > 7FH) OR (temp < 80H) 
-                    (* if a positive result is greater than 7FH or a negative result is less than 80H *)
-                    THEN #DE; (* divide error *) ;
-                    ELSE
-                        AL  =  temp;
-                        AH  =  AX SignedModulus SRC;
-                    FI;
-                ELSE
-                    IF OpernadSize  =  16 (* doubleword/word operation *)
-                    THEN
-                        temp  =  DX:AX / SRC; (* signed division *)
-                        IF (temp > 7FFFH) OR (temp < 8000H) 
-                        (* if a positive result is greater than 7FFFH *)
-                        (* or a negative result is less than 8000H *)
-                        THEN #DE; (* divide error *) ;
-                        ELSE
-                            AX  =  temp;
-                            DX  =  DX:AX SignedModulus SRC;
-                        FI;
-                    ELSE (* quadword/doubleword operation *)
-                        temp  =  EDX:EAX / SRC; (* signed division *)
-                        IF (temp > 7FFFFFFFH) OR (temp < 80000000H) 
-                        (* if a positive result is greater than 7FFFFFFFH *)
-                        (* or a negative result is less than 80000000H *)
-                        THEN #DE; (* divide error *) ;
-                        ELSE
-                            EAX  =  temp;
-                            EDX  =  EDX:EAX SignedModulus SRC;
-                        FI;
-                    FI;
-                FI;
-        
-        @param cpu: current CPU.
-        @param src: source operand.        
-        '''
         reg_name_h = { 8: 'AH', 16: 'DX', 32:'EDX', 64:'RDX'}[src.size]
         reg_name_l = { 8: 'AL', 16: 'AX', 32:'EAX', 64:'RAX'}[src.size]
-        dividend = cpu.getRegister(reg_name_l)
-        divisor = src.read()
+        reg_h = cpu.getRegister(reg_name_h)
+        reg_l = cpu.getRegister(reg_name_l)
+
+        if proved(reg_h == EXTRACT(SEXTEND(reg_l, src.size, src.size * 2), src.size, src.size)):
+            dividend = reg_l
+            divisor = src.read()
+        else:
+            dividend = CONCAT(src.size, reg_h, reg_l)
+            divisor = SEXTEND(src.read(), src.size, src.size * 2)
 
         if isinstance(divisor, (int,long)) and divisor == 0:
             raise DivideError()
@@ -168,8 +127,35 @@ class Cpu(cpu.Cpu):
             raise DivideError()
         reminder = dividend % divisor
 
-        cpu.setRegister(reg_name_l, quotient)
-        cpu.setRegister(reg_name_h, reminder)
+        cpu.setRegister(reg_name_l, EXTRACT(quotient, 0, src.size))
+        cpu.setRegister(reg_name_h, EXTRACT(reminder, 0, src.size))
+        #Flags Affected
+        #The CF, OF, SF, ZF, AF, and PF flags are undefined.
+
+    @cpu.instruction
+    def DIV(cpu, src):
+        reg_name_h = { 8: 'AH', 16: 'DX', 32:'EDX', 64:'RDX'}[src.size]
+        reg_name_l = { 8: 'AL', 16: 'AX', 32:'EAX', 64:'RAX'}[src.size]
+        reg_h = cpu.getRegister(reg_name_h)
+        reg_l = cpu.getRegister(reg_name_l)
+
+        if proved(reg_h == 0):
+            dividend = reg_l
+            divisor = src.read()
+        else:
+            dividend = CONCAT(src.size, reg_h, reg_l)
+            divisor = ZEXTEND(src.read(), src.size * 2)
+
+        if isinstance(divisor, (int,long)) and divisor == 0:
+            raise DivideError()
+
+        quotient = UDiv(dividend, divisor)
+        if isinstance(quotient, (int,long)) and quotient > (1<<src.size)-1:
+            raise DivideError()
+        reminder = URem(dividend, divisor)
+
+        cpu.setRegister(reg_name_l, EXTRACT(quotient, 0, src.size))
+        cpu.setRegister(reg_name_h, EXTRACT(reminder, 0, src.size))
         #Flags Affected
         #The CF, OF, SF, ZF, AF, and PF flags are undefined.
 
