@@ -107,5 +107,5 @@ if __name__ == "__main__":
     predefine = {("RBP-8", 4): "C", ("RBP-12", 4):"B", ("RBP-16", 4):"A"}
 
     res = symbbl(inst, "amd64", predefine)
-    #print prettyPrint(res)
+    print prettyPrint(res)
 

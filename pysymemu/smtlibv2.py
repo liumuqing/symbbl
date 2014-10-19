@@ -12,7 +12,7 @@ class Symbol(object):
     size = property(lambda x : x.symbol.size())
 
     def simplify(self):
-        self.symbol = z3.simplify(self.symbol, elim_sign_ext = False)
+        self.symbol = z3.simplify(self.symbol, )#elim_sign_ext = False)
         self._simplified = True
         return self
 
