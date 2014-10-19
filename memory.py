@@ -87,7 +87,6 @@ class DataMemory(object):
         return retv
     def store(self, addr, data, sizeOfBit):
         addr.simplify()
-        print addr, "-------", data
         if isinstance(data, BitVec):
             data.simplify()
         sizeOfByte = sizeOfBit / 8
