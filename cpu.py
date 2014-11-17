@@ -149,10 +149,10 @@ class Cpu(cpu.Cpu):
         if isinstance(divisor, (int,long)) and divisor == 0:
             raise DivideError()
 
-        quotient = UDiv(dividend, divisor)
+        quotient = UDIV(dividend, divisor)
         if isinstance(quotient, (int,long)) and quotient > (1<<src.size)-1:
             raise DivideError()
-        reminder = URem(dividend, divisor)
+        reminder = UREM(dividend, divisor)
 
         cpu.setRegister(reg_name_l, EXTRACT(quotient, 0, src.size))
         cpu.setRegister(reg_name_h, EXTRACT(reminder, 0, src.size))

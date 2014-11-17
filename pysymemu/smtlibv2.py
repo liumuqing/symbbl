@@ -27,7 +27,6 @@ def binaryBoolOperatorWithIMM(method):
         retv = method(self, other)
         return retv
     return new_method
-
 class Bool(Symbol):
     def __init__(self, name):
         self._simplified = False

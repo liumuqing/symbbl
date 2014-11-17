@@ -80,8 +80,8 @@ def prettyPrint(cpu):
         if issymbolic(cpu.getRegister(k)) and cpu.getRegister(k).size == cpu.AddressSize:
             retv += "%s:\n%s\n\n" % (p(k), p(cpu.getRegister(k)))
 
-    for k in cpu.mem.data.keys():
-        retv += "%s@[%s]:\t\t\t%s\n\n" % (p(k[1]), p(k[0]), p(cpu.mem.data[k]))
+    for (addr, sizeOfBit) in cpu.mem.write_records:
+        retv += "%s@[%s]:\t\t\t%s\n\n" % ((sizeOfBit/8), p(addr), p(cpu.mem.load(addr, sizeOfBit).simplify()))
 
     return retv
 
