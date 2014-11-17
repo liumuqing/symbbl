@@ -441,7 +441,7 @@ def getallvalues(x):
     while solver.check() == z3.sat:
         m = solver.model()
         v = m[s]
-        retv.append(v)
+        retv.append(int(str(v)))
         solver.add(s != v)
     return retv
 

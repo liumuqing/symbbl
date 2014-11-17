@@ -6,6 +6,7 @@ symbbl
 Install:
 -------------
 * copy cpu.py from rep. https://github.com/liumuqing/pysymemu or https://github.com/feliam/pysymemu
+
 Dependencies:
 -------------
 * z3, an smt solver. http://z3.codeplex.com/ 
