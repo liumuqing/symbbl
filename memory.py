@@ -42,8 +42,8 @@ class ByteArray(object):
 
 
 class DataMemory(object):
-    def __init__(self):
-        self.data = ByteArray("Mem", 64)
+    def __init__(self, addrSize):
+        self.data = ByteArray("Mem", addrSize)
         self.read_records = set()
         self.write_records = set()
 

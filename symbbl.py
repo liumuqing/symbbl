@@ -23,7 +23,7 @@ def symbbl(inst, arch="i386", preDefineMem={}, startPC=0):
     for addr in xrange(len(inst)):
         instmem.putchar(addr, inst[addr])
 
-    datamem = DataMemory()
+    datamem = DataMemory({'i386':32, 'amd64':64}[arch])
 
     PC0 = startPC
     cpu = Cpu(instmem, datamem, arch)
