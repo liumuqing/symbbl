@@ -3,6 +3,10 @@ symbbl
 * An intel 64 symbolic basic block analysis model. 
 * ``cpu.py`` is from https://github.com/feliam/pysymemu
 
+Install:
+-------------
+* copy cpu.py from rep. https://github.com/liumuqing/pysymemu or https://github.com/feliam/pysymemu
+
 Dependencies:
 -------------
 * z3, an smt solver. http://z3.codeplex.com/ 

@@ -1,4 +1,6 @@
 from pysymemu.smtlibv2 import BitVec, EXTRACT, proved, CONCAT
+#from z3 import Array, Update
+import z3
 
 class MemoryException(Exception):
     '''
@@ -23,89 +25,52 @@ class InstMemory(object):
             raise MemoryException("Can not asscess InstMem", addr)
         return retv
 
-class DataMemory(object):
-    def __init__(self):
-        self.data = {}
-    @staticmethod
-    def provedAddrSizeInList(addr, size, l):
-        if len(l) == 0:
-            return []
-        if len(l) == 1:
-            k = l[0]
-            if size != 0 and proved((addr==k[0]) & (size == k[1])):
-                return l
-            elif size == 0 and proved(addr==k[0]):
-                return l
-            else:
-                return []
-        retv = []
+class ByteArray(object):
+    def __init__(self, name, addressSize):
+        assert addressSize in [32, 64]
+        self._data = z3.Array(name, z3.BitVecSort(addressSize), z3.BitVecSort(8))
+        self._addressSize = addressSize
+    def get(self, addr):
+        return self._data[addr]
+    def put(self, addr, value):
+        if isinstance(addr, int) or isinstance(addr, long):
+            self._data = z3.Update(self._data, z3.BitVecVal(self._addressSize, addr), value)
+        else:
+            self._data = z3.Update(self._data, addr, value)
 
-        left = l[:len(l)/2]
-        right = l[len(l)/2:]
-        for ll in [left, right]:
-            exp = False
-            for k in ll:
-                if size == 0:
-                    exp = exp | (addr == k[0])
-                else:
-                    exp = exp | ((addr == k[0]) & (size == k[1]))
-            if proved(exp):
-                a = DataMemory.provedAddrSizeInList(addr, size, ll)
-                retv.extend(a)
-        return retv
+
+
+
+class DataMemory(object):
+    def __init__(self, addrSize):
+        self.data = ByteArray("Mem", addrSize)
+        self.read_records = set()
+        self.write_records = set()
 
     def putchar(self, addr, data):
         addr.simplify()
+        _addr = addr.symbol
         if isinstance(data, BitVec):
             data.simplify()
-        for k in self.data.keys():
-            if proved(addr == k[0]):
-                self.data.pop(k)
-        key = (addr, 1)
-        self.data[key] = EXTRACT(data, 0, 8)
+            _data = data.symbol
+        else:
+            _data = data
+        self.data.put(_addr, _data)
+
     def getchar(self, addr):
         addr.simplify()
-        for k in self.data.keys():
-            if proved(addr%k[1] == k[0]):
-                return EXTRACT((addr - k[0]) * 8, 8, self.data[k])
-        retv = BitVec(str("1@[%s]" % addr), 8) # "[%s] % addr" may be a unicode, ...., cast it to str
-        self.data[(addr, 1)] = retv
-        return retv
+        return BitVec(self.data.get(addr.symbol)) & 0xff
+
     def load(self, addr, sizeOfBit):
         sizeOfByte = sizeOfBit / 8
-        #assert proved(addr%sizeOfByte == 0) #This line is Wrong, e.g RBP-8 will not be proved
-        for k in self.provedAddrSizeInList(addr, sizeOfByte, self.data.keys()):
-            return self.data[k]
-        """
-        for k in self.data.keys():
-            if proved(addr/k[1]*k[1]  == k[0]) or proved(k[0]/sizeOfByte*sizeOfByte == addr):
-                retv = CONCAT(8, *[self.getchar(addr+i) for i in reversed(range(0, sizeOfByte))])
-                return retv
-        """
-        retv = BitVec((str("%d@[%s]" % (sizeOfByte, addr))), sizeOfBit)
-        self.data[(addr, sizeOfByte)] = retv
+        retv = CONCAT(8, *[self.getchar(addr+i) for i in reversed(range(0, sizeOfByte))])
         return retv
+
     def store(self, addr, data, sizeOfBit):
-        addr.simplify()
-        if isinstance(data, BitVec):
-            data.simplify()
-        sizeOfByte = sizeOfBit / 8
-        for k in self.provedAddrSizeInList(addr, sizeOfByte, self.data.keys()):
-            self.data.pop(k)
-            self.data[(addr, sizeOfByte)] = EXTRACT(data, 0, sizeOfBit)
-            return 
-        """
-        for k in self.data.keys():
-            if proved(addr/k[1]*k[1]  == k[0]) and proved(k[0] == k[0] % sizeOfByte):
-                old_data = self.data[k]
-                self.data.pop(k)
-            if proved(addr  == k[0]/sizeOfByte*sizeOfByte):
-                pass
-            elif proved(k[0] == addr / k[1] * k[1]):
-                #FIXME: this line is wrong
-                pass
-        """
-        self.data[(addr, sizeOfByte)] = EXTRACT(data, 0, sizeOfBit)
+        self.write_records.add((addr, sizeOfBit))
+        sizeOfByte = sizeOfBit/8
+        for k in range(sizeOfByte):
+            self.putchar(addr+k,  EXTRACT(data, k*8, 8))
 
 
 

@@ -23,7 +23,7 @@ def symbbl(inst, arch="i386", preDefineMem={}, startPC=0):
     for addr in xrange(len(inst)):
         instmem.putchar(addr, inst[addr])
 
-    datamem = DataMemory()
+    datamem = DataMemory({'i386':32, 'amd64':64}[arch])
 
     PC0 = startPC
     cpu = Cpu(instmem, datamem, arch)
@@ -80,8 +80,8 @@ def prettyPrint(cpu):
         if issymbolic(cpu.getRegister(k)) and cpu.getRegister(k).size == cpu.AddressSize:
             retv += "%s:\n%s\n\n" % (p(k), p(cpu.getRegister(k)))
 
-    for k in cpu.mem.data.keys():
-        retv += "%s@[%s]:\t\t\t%s\n\n" % (p(k[1]), p(k[0]), p(cpu.mem.data[k]))
+    for (addr, sizeOfBit) in cpu.mem.write_records:
+        retv += "%s@[%s]:\t\t\t%s\n\n" % ((sizeOfBit/8), p(addr), p(cpu.mem.load(addr, sizeOfBit).simplify()))
 
     return retv
 

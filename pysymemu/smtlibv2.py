@@ -27,7 +27,6 @@ def binaryBoolOperatorWithIMM(method):
         retv = method(self, other)
         return retv
     return new_method
-
 class Bool(Symbol):
     def __init__(self, name):
         self._simplified = False
@@ -442,7 +441,7 @@ def getallvalues(x):
     while solver.check() == z3.sat:
         m = solver.model()
         v = m[s]
-        retv.append(v)
+        retv.append(int(str(v)))
         solver.add(s != v)
     return retv
 
